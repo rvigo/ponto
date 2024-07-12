@@ -65,18 +65,27 @@ pub fn load_config(config_path: &Path) -> Result<Configuration> {
     let config: Config = load_file(config_path)
         .and_then(|c| c.ok_or_else(|| anyhow::anyhow!("config.toml not found")))?;
 
-    let variables = config
+    // expand paths
+    let packages = config
         .packages
+        .into_iter()
+        .map(|(name, mut package)| -> Result<_, anyhow::Error> {
+            package.files = expand_paths(package.files)?;
+            Ok((name, package))
+        })
+        .collect::<Result<HashMap<_, _>, _>>()?;
+
+    // merge variables
+    let package_variables = packages
         .values()
         .fold(HashMap::new(), |mut acc, p| {
-            acc.extend(p.variables.clone());
+            acc.extend(p.variables.to_owned());
             acc
         })
-        .into_iter()
-        .chain(config.variables) // overrides inner variables with the same name
-        .collect();
+        .into_iter();
 
-    let packages = config.packages;
+    let variables = merge_variables(config.variables.into_iter(), package_variables);
+
     Ok(Configuration {
         packages,
         variables,
@@ -97,4 +106,24 @@ where
     f.read_to_string(&mut buf).context("read file")?;
     let data = serde_yaml::from_str::<T>(&buf).context("deserialize file contents")?;
     Ok(Some(data))
+}
+
+fn expand_path(path: &Path) -> Result<PathBuf> {
+    let expanded = shellexpand::full(&path.to_string_lossy())?.to_string();
+
+    Ok(PathBuf::from(expanded))
+}
+
+fn expand_paths(files: Files) -> Result<Files> {
+    files
+        .into_iter()
+        .map(|(k, v)| -> Result<_, anyhow::Error> { Ok((k, expand_path(&v)?)) })
+        .collect()
+}
+
+fn merge_variables(
+    variables: impl Iterator<Item = (String, String)>,
+    package_variables: impl Iterator<Item = (String, String)>,
+) -> Variables {
+    variables.into_iter().chain(package_variables).collect()
 }

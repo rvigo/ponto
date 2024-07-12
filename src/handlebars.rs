@@ -4,7 +4,7 @@ use handlebars::{
 };
 use std::process::{Command, Stdio};
 
-pub fn create_new_handlebars<'b>() -> Result<Handlebars<'b>> {
+pub fn init<'hb>() -> Result<Handlebars<'hb>> {
     let mut handlebars = Handlebars::new();
     handlebars.register_escape_fn(str::to_string);
     handlebars.set_strict_mode(true);

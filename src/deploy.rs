@@ -1,4 +1,4 @@
-use super::handlebars::create_new_handlebars;
+use super::handlebars::init;
 use crate::{
     config::Configuration,
     filesystem::Filesystem,
@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use log::info;
 
 pub fn deploy(config: Configuration, opts: Options) -> Result<()> {
-    let handlebars = create_new_handlebars().context("initialize handlebars")?;
+    let handlebars = init().context("initialize handlebars")?;
 
     // pre hook
     hook::Pre::run(&opts.pre, &handlebars, &config.variables)?;
