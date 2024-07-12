@@ -6,13 +6,28 @@ use std::{
     path::PathBuf,
 };
 
-pub trait Filesystem {
+pub struct Filesystem;
+
+impl Filesystem {
+    pub fn copy(from: &PathBuf, to: &PathBuf, force: bool) -> Result<()> {
+        if to.exists() && !force {
+            warn!("file {:?} already exists, skipping", to);
+            return Ok(());
+        }
+
+        fs::create_dir_all(to.parent().unwrap()).context("creating parent directory")?;
+        fs::copy(from, to).context("copying file")?;
+        Ok(())
+    }
+}
+
+pub trait FilesystemExt {
     fn is_template(&self) -> Result<bool>;
 
     fn real_path(&self) -> Result<PathBuf>;
 }
 
-impl Filesystem for PathBuf {
+impl FilesystemExt for PathBuf {
     fn is_template(&self) -> Result<bool> {
         if fs::metadata(self)?.is_dir() {
             return Ok(false);

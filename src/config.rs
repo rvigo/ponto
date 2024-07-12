@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use log::trace;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -7,7 +8,20 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub type Files = HashMap<PathBuf, PathBuf>;
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct TargetSpec {
+    pub to: PathBuf,
+    pub symlink: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(untagged)]
+pub enum FileSpec {
+    Simple(PathBuf),
+    WithSpec(TargetSpec),
+}
+
+pub type Files = HashMap<PathBuf, FileSpec>;
 pub type Variables = HashMap<String, String>;
 
 #[derive(Debug, Deserialize, Serialize, Default, Clone)]
@@ -22,7 +36,7 @@ pub struct Package {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct Config {
+pub struct InnerConfig {
     #[serde(flatten)]
     packages: HashMap<String, Package>,
     #[serde(default)]
@@ -62,7 +76,7 @@ impl Configuration {
 }
 
 pub fn load_config(config_path: &Path) -> Result<Configuration> {
-    let config: Config = load_file(config_path)
+    let config: InnerConfig = load_file(config_path)
         .and_then(|c| c.ok_or_else(|| anyhow::anyhow!("config.toml not found")))?;
 
     // expand paths
@@ -86,10 +100,15 @@ pub fn load_config(config_path: &Path) -> Result<Configuration> {
 
     let variables = merge_variables(config.variables.into_iter(), package_variables);
 
-    Ok(Configuration {
+    trace!("variables: {:?}", variables);
+    trace!("packages: {:?}", packages);
+
+    let effective_config = Configuration {
         packages,
         variables,
-    })
+    };
+
+    Ok(effective_config)
 }
 
 pub fn load_file<T>(filename: &Path) -> Result<Option<T>>
@@ -117,7 +136,20 @@ fn expand_path(path: &Path) -> Result<PathBuf> {
 fn expand_paths(files: Files) -> Result<Files> {
     files
         .into_iter()
-        .map(|(k, v)| -> Result<_, anyhow::Error> { Ok((k, expand_path(&v)?)) })
+        .map(|(k, v)| -> Result<_, anyhow::Error> {
+            let updated_v = match v {
+                FileSpec::Simple(path) => FileSpec::Simple(expand_path(&path)?),
+                FileSpec::WithSpec(target) => {
+                    let expanded_to = expand_path(&target.to)?;
+                    FileSpec::WithSpec(TargetSpec {
+                        to: expanded_to,
+                        symlink: target.symlink,
+                    })
+                }
+            };
+
+            Ok((k, updated_v))
+        })
         .collect()
 }
 

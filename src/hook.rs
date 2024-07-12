@@ -1,9 +1,10 @@
 use crate::config::Variables;
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
-use log::debug;
+use log::{debug, info, trace};
 use std::{
     fs,
+    os::unix::fs::PermissionsExt,
     path::Path,
     process::{Child, Command},
 };
@@ -22,7 +23,7 @@ pub trait Hook {
             debug!("No hook at {:?}", location);
             return Ok(());
         }
-        debug!("Running hook at {:?}", location);
+        info!("Running hook at {:?}", location);
 
         let script_location = cwd!().join(location);
         render_template(&script_location, handlebars, variables)?;
@@ -39,8 +40,6 @@ pub trait Hook {
 }
 
 fn run_script_file(script: &Path) -> Result<Child> {
-    use std::os::unix::fs::PermissionsExt;
-
     let permissions = script.metadata()?.permissions();
     if !script.is_dir() && permissions.mode() & 0o111 != 0 {
         Command::new(script).spawn().context("spawn script file")
@@ -74,15 +73,16 @@ pub struct Post;
 impl Hook for Pre {}
 impl Hook for Post {}
 
-pub fn remove_templated_files() -> Result<()> {
-    let templated_files = fs::read_dir(cwd!())?
+pub fn remove_templated_scripts() -> Result<()> {
+    let templated = fs::read_dir(cwd!())?
         .filter_map(Result::ok)
         .filter(|entry| {
             let path = entry.path();
             path.extension().map_or(false, |ext| ext == "templated")
         });
 
-    for entry in templated_files {
+    for entry in templated {
+        trace!("removing templated script: {:?}", entry.path());
         fs::remove_file(entry.path())?;
     }
 

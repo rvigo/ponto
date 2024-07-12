@@ -1,7 +1,7 @@
 use super::file_type::FileType;
-use crate::filesystem::Filesystem;
+use crate::filesystem::FilesystemExt;
 use anyhow::{Context, Result};
-use log::debug;
+use log::trace;
 use std::{fmt::Display, path::Path};
 
 pub struct Symlink;
@@ -10,6 +10,7 @@ impl Symlink {
     pub fn create(from: &Path, to: &Path, force: bool) -> Result<()> {
         let result = SymlinkState::from(from, FileType::try_from(from)?, FileType::try_from(to)?)
             .context("get symlink state")?;
+        trace!("{result}");
 
         // TODO warn if source is missing
         let should_continue = match result {
@@ -19,17 +20,16 @@ impl Symlink {
             | SymlinkState::TargetNotSymlink => false,
             SymlinkState::OnlySourceExists => true,
             SymlinkState::Identical if force => {
-                debug!("forcing symlink creation");
+                trace!("forcing symlink creation");
                 true
             }
             SymlinkState::Identical => false,
         };
-        debug!("{result}");
 
         if should_continue {
             std::fs::create_dir_all(to.parent().unwrap()).context("create dir all")?;
             if force && to.exists() {
-                debug!("removing existing symlink");
+                trace!("removing existing symlink");
                 std::fs::remove_file(to).context("remove file")?;
             }
             std::os::unix::fs::symlink(
@@ -40,6 +40,7 @@ impl Symlink {
             )
             .context("create symlink")?;
         }
+
         Ok(())
     }
 }

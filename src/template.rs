@@ -1,7 +1,7 @@
 use crate::{config::Variables, file_type::FileType};
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
-use log::debug;
+use log::trace;
 use std::{
     fmt::Display,
     fs::{self},
@@ -17,18 +17,26 @@ impl Template {
         to: &Path,
         handlebars: &Handlebars<'_>,
         variables: &Variables,
+        force: bool,
     ) -> Result<()> {
-        let template_type = TemplateState::from(FileType::try_from(to)?, FileType::try_from(to)?);
-        debug!("{template_type}");
-        let should_run = match template_type {
+        let template_type = TemplateState::from(FileType::try_from(from)?, FileType::try_from(to)?);
+        trace!("{template_type}");
+
+        let should_continue = match template_type {
+            TemplateState::TargetNotRegularFile | TemplateState::BothMissing => false,
+            TemplateState::OnlySourceExists | TemplateState::Changed => true,
+            TemplateState::Identical if force => {
+                trace!("forcing template rendering");
+                true
+            }
             TemplateState::Identical => false,
-            TemplateState::OnlySourceExists => true,
-            TemplateState::Changed => true,
-            TemplateState::TargetNotRegularFile => false,
-            TemplateState::BothMissing => false,
         };
 
-        if should_run {
+        if should_continue {
+            if force && to.exists() {
+                trace!("removing existing file");
+                std::fs::remove_file(to).context("remove file")?;
+            }
             let content = fs::read_to_string(from).context("read to string")?;
             let rendered = handlebars
                 .render_template(&content, variables)
