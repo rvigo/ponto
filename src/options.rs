@@ -22,3 +22,14 @@ pub struct Options {
     #[clap(short = 'v', long = "verbose", action = clap::ArgAction::Count)]
     pub verbosity: u8,
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_cli() {
+        Options::command().debug_assert()
+    }
+}

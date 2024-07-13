@@ -1,12 +1,10 @@
 use super::handlebars::init;
-use crate::{
-    config::{Configuration, FileSpec, Variables},
-    filesystem::{Filesystem, FilesystemExt},
-    hook::{self, Hook},
-    option::Options,
-    symlink::Symlink,
-    template::Template,
-};
+use crate::config::{Configuration, FileTarget, Variables};
+use crate::filesystem::{Filesystem, FilesystemExt};
+use crate::hook::{self, Hook};
+use crate::options::Options;
+use crate::symlink::Symlink;
+use crate::template::Template;
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use log::{debug, info};
@@ -26,10 +24,10 @@ pub fn deploy(config: Configuration, opts: Options) -> Result<()> {
     for (_, package) in config.ordered_by_dependencies() {
         for (from, to) in package.files {
             match to {
-                FileSpec::Simple(to) => {
+                FileTarget::Simple(to) => {
                     process_simple(&from, &to, &handlebars, &config.variables, opts.force)?
                 }
-                FileSpec::WithSpec(spec) => process_with_spec(
+                FileTarget::WithSpec(spec) => process_with_spec(
                     &from,
                     &spec.to,
                     spec.symlink,

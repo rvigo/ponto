@@ -2,12 +2,10 @@ use crate::config::Variables;
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use log::{debug, info, trace};
-use std::{
-    fs,
-    os::unix::fs::PermissionsExt,
-    path::Path,
-    process::{Child, Command},
-};
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
+use std::process::{Child, Command};
 
 #[macro_export]
 macro_rules! cwd {
@@ -39,6 +37,12 @@ pub trait Hook {
     }
 }
 
+pub struct Pre;
+pub struct Post;
+
+impl Hook for Pre {}
+impl Hook for Post {}
+
 fn run_script_file(script: &Path) -> Result<Child> {
     let permissions = script.metadata()?.permissions();
     if !script.is_dir() && permissions.mode() & 0o111 != 0 {
@@ -67,12 +71,6 @@ fn render_template(
     Ok(())
 }
 
-pub struct Pre;
-pub struct Post;
-
-impl Hook for Pre {}
-impl Hook for Post {}
-
 pub fn remove_templated_scripts() -> Result<()> {
     let templated = fs::read_dir(cwd!())?
         .filter_map(Result::ok)
@@ -80,11 +78,85 @@ pub fn remove_templated_scripts() -> Result<()> {
             let path = entry.path();
             path.extension().map_or(false, |ext| ext == "templated")
         });
-
     for entry in templated {
         trace!("removing templated script: {:?}", entry.path());
         fs::remove_file(entry.path())?;
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Variables;
+    use handlebars::Handlebars;
+    use std::fs::File;
+    use std::io::Write;
+    use tempdir::TempDir;
+
+    #[test]
+    fn should_run_hook() -> Result<()> {
+        let dir = TempDir::new("hook")?;
+
+        let script = dir.path().join("script.sh");
+        File::create(&script)?.write_all(b"echo 'Hello, world!'")?;
+
+        let handlebars = Handlebars::new();
+        let variables = Variables::new();
+
+        Pre::run(&script, &handlebars, &variables)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn should_remove_templated_scripts() -> Result<()> {
+        let dir = TempDir::new("hook")?;
+        // override current dir
+        std::env::set_current_dir(dir.path())?;
+
+        let script = dir.path().join("script.sh");
+        File::create(&script)?.write_all(b"echo 'Hello, {{name}}!'")?;
+
+        let templated = dir.path().join("script.templated");
+        let variables = vec![("name".to_string(), "world".to_string())]
+            .into_iter()
+            .collect::<Variables>();
+
+        assert!(!templated.exists());
+
+        Pre::run(&script, &Handlebars::new(), &variables)?;
+
+        assert!(templated.exists());
+
+        remove_templated_scripts()?;
+
+        assert!(!templated.exists());
+
+        Ok(())
+    }
+
+    #[test]
+    fn should_render_script_template() -> Result<()> {
+        let dir = TempDir::new("hook")?;
+
+        let script = dir.path().join("script.sh");
+        File::create(&script)?.write_all(b"echo 'Hello, {{name}}!'")?;
+
+        let desired_templated_script = dir.path().join("script.templated");
+        let variables = vec![("name".to_string(), "world".to_string())]
+            .into_iter()
+            .collect::<Variables>();
+
+        assert!(!desired_templated_script.exists());
+
+        render_template(&script, &Handlebars::new(), &variables)?;
+
+        assert!(desired_templated_script.exists());
+        let templated_contents = fs::read_to_string(&desired_templated_script)?;
+        assert_eq!(templated_contents, "echo 'Hello, world!'");
+
+        Ok(())
+    }
 }

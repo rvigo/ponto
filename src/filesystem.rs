@@ -1,10 +1,8 @@
 use anyhow::{Context, Result};
 use log::warn;
-use std::{
-    fs::{self, File},
-    io::Read,
-    path::PathBuf,
-};
+use std::fs::{self, File};
+use std::io::Read;
+use std::path::PathBuf;
 
 pub struct Filesystem;
 
@@ -47,5 +45,44 @@ impl FilesystemExt for PathBuf {
     fn real_path(&self) -> Result<PathBuf> {
         let path = self.canonicalize()?;
         Ok(path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+    use std::fs::File;
+    use std::io::Write;
+    use tempdir::TempDir;
+
+    #[test]
+    fn should_copy_file() -> Result<()> {
+        let dir = TempDir::new("filesystem")?;
+
+        let from = dir.path().join("from.txt");
+        File::create(&from)?.write_all(b"Hello, world!")?;
+        let to = dir.path().join("to.txt");
+
+        Filesystem::copy(&from, &to, false)?;
+
+        let from_content = fs::read_to_string(&from)?;
+        let to_content = fs::read_to_string(&to)?;
+
+        assert_eq!(from_content, to_content);
+
+        Ok(())
+    }
+
+    #[test]
+    fn should_check_if_file_is_template() -> Result<()> {
+        let dir = TempDir::new("filesystem")?;
+
+        let file_path = dir.path().join("file.txt");
+        File::create(&file_path)?.write_all(b"Hello, {{ name }}!")?;
+
+        assert!(file_path.is_template()?);
+
+        Ok(())
     }
 }

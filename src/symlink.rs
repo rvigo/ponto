@@ -2,7 +2,7 @@ use super::file_type::FileType;
 use crate::filesystem::FilesystemExt;
 use anyhow::{Context, Result};
 use log::trace;
-use std::{fmt::Display, path::Path};
+use std::{fmt::Display, fs, path::Path};
 
 pub struct Symlink;
 
@@ -27,10 +27,10 @@ impl Symlink {
         };
 
         if should_continue {
-            std::fs::create_dir_all(to.parent().unwrap()).context("create dir all")?;
+            fs::create_dir_all(to.parent().unwrap()).context("create dir all")?;
             if force && to.exists() {
                 trace!("removing existing symlink");
-                std::fs::remove_file(to).context("remove file")?;
+                fs::remove_file(to).context("remove file")?;
             }
             std::os::unix::fs::symlink(
                 from.to_path_buf()
@@ -91,5 +91,40 @@ impl Display for SymlinkState {
             SymlinkState::BothMissing => "source and target are missing",
         }
         .fmt(f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+    use std::fs::File;
+    use std::io::Write;
+    use tempdir::TempDir;
+
+    #[test]
+    fn should_create_symlink() -> Result<()> {
+        let dir = TempDir::new("symlink")?;
+
+        let source_path = dir.path().join("source.txt");
+        let mut source = File::create(&source_path)?;
+        source.write_all(b"Hello, world!")?;
+
+        let link_path = dir.path().join("link.txt");
+
+        Symlink::create(&source_path, &link_path, false)?;
+
+        assert!(link_path.exists());
+        assert_eq!(
+            link_path
+                .read_link()
+                .context("read link")?
+                .to_path_buf()
+                .real_path()
+                .context("get real path")?,
+            source_path.real_path().context("get real path")?
+        );
+
+        Ok(())
     }
 }

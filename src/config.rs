@@ -1,30 +1,28 @@
 use anyhow::{Context, Result};
 use log::trace;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    fs::File,
-    io::{ErrorKind, Read},
-    path::{Path, PathBuf},
-};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{ErrorKind, Read};
+use std::path::{Path, PathBuf};
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct TargetSpec {
     pub to: PathBuf,
     pub symlink: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 #[serde(untagged)]
-pub enum FileSpec {
+pub enum FileTarget {
     Simple(PathBuf),
     WithSpec(TargetSpec),
 }
 
-pub type Files = HashMap<PathBuf, FileSpec>;
+pub type Files = HashMap<PathBuf, FileTarget>;
 pub type Variables = HashMap<String, String>;
 
-#[derive(Debug, Deserialize, Serialize, Default, Clone)]
+#[derive(Debug, Deserialize, Serialize, Default, Clone, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Package {
     #[serde(default)]
@@ -77,7 +75,7 @@ impl Configuration {
 
 pub fn load_config(config_path: &Path) -> Result<Configuration> {
     let config: InnerConfig = load_file(config_path)
-        .and_then(|c| c.ok_or_else(|| anyhow::anyhow!("config.toml not found")))?;
+        .and_then(|c| c.ok_or_else(|| anyhow::anyhow!("config.yaml not found")))?;
 
     // expand paths
     let packages = config
@@ -138,10 +136,10 @@ fn expand_paths(files: Files) -> Result<Files> {
         .into_iter()
         .map(|(k, v)| -> Result<_, anyhow::Error> {
             let updated_v = match v {
-                FileSpec::Simple(path) => FileSpec::Simple(expand_path(&path)?),
-                FileSpec::WithSpec(target) => {
+                FileTarget::Simple(path) => FileTarget::Simple(expand_path(&path)?),
+                FileTarget::WithSpec(target) => {
                     let expanded_to = expand_path(&target.to)?;
-                    FileSpec::WithSpec(TargetSpec {
+                    FileTarget::WithSpec(TargetSpec {
                         to: expanded_to,
                         symlink: target.symlink,
                     })
@@ -158,4 +156,82 @@ fn merge_variables(
     package_variables: impl Iterator<Item = (String, String)>,
 ) -> Variables {
     variables.into_iter().chain(package_variables).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, fs::File, io::Write};
+    use tempdir::TempDir;
+
+    #[test]
+    fn should_merge_variables() {
+        let variables = vec![("a".to_string(), "1".to_string())]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+        let package_variables = vec![("b".to_string(), "2".to_string())]
+            .into_iter()
+            .collect::<HashMap<_, _>>();
+
+        let merged = super::merge_variables(variables.into_iter(), package_variables.into_iter());
+
+        let expected = vec![
+            ("a".to_string(), "1".to_string()),
+            ("b".to_string(), "2".to_string()),
+        ]
+        .into_iter()
+        .collect::<HashMap<_, _>>();
+
+        assert_eq!(merged, expected);
+    }
+
+    #[test]
+    fn should_load_config() -> anyhow::Result<()> {
+        let config_content = r#"
+        variables:
+            a: "1"
+            b: "2"
+        
+        shell:
+            files:
+                .bashrc: .bashrc
+
+        "#
+        .to_string();
+
+        let dir = TempDir::new("config")?;
+        let config_path = dir.path().join("config.toml");
+        let mut config = File::create(&config_path)?;
+        config.write(config_content.as_bytes())?;
+
+        let config = super::load_config(&config_path).unwrap();
+
+        let expected = super::Configuration {
+            packages: vec![(
+                "shell".to_string(),
+                super::Package {
+                    depends: vec![],
+                    files: vec![(
+                        ".bashrc".into(),
+                        super::FileTarget::Simple(".bashrc".into()),
+                    )]
+                    .into_iter()
+                    .collect(),
+                    variables: HashMap::new(),
+                },
+            )]
+            .into_iter()
+            .collect(),
+            variables: vec![
+                ("a".to_string(), "1".to_string()),
+                ("b".to_string(), "2".to_string()),
+            ]
+            .into_iter()
+            .collect(),
+        };
+
+        assert_eq!(config.variables, expected.variables);
+        assert_eq!(config.packages, expected.packages);
+
+        Ok(())
+    }
 }

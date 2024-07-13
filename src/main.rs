@@ -1,7 +1,3 @@
-use anyhow::Result;
-use clap::Parser;
-use option::Options;
-
 mod config;
 mod deploy;
 mod file_type;
@@ -9,9 +5,13 @@ mod filesystem;
 mod handlebars;
 mod hook;
 mod logger;
-mod option;
+mod options;
 mod symlink;
 mod template;
+
+use anyhow::Result;
+use clap::Parser;
+use options::Options;
 
 fn main() -> Result<()> {
     let opts = Options::parse();

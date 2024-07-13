@@ -16,3 +16,7 @@ handlebars = "5.1.0"
 handlebars_misc_helpers = "0.16.3"
 evalexpr = "11"
 shellexpand = "3"
+
+
+[dev-dependencies]
+tempdir = "0.3.7"

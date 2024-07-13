@@ -2,12 +2,10 @@ use crate::{config::Variables, file_type::FileType};
 use anyhow::{Context, Result};
 use handlebars::Handlebars;
 use log::trace;
-use std::{
-    fmt::Display,
-    fs::{self},
-    io::Write,
-    path::Path,
-};
+use std::fmt::Display;
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::Path;
 
 pub struct Template;
 
@@ -35,14 +33,16 @@ impl Template {
         if should_continue {
             if force && to.exists() {
                 trace!("removing existing file");
-                std::fs::remove_file(to).context("remove file")?;
+                fs::remove_file(to).context("remove file")?;
             }
+
             let content = fs::read_to_string(from).context("read to string")?;
             let rendered = handlebars
                 .render_template(&content, variables)
                 .context("render template")?;
-            std::fs::create_dir_all(to.parent().unwrap()).context("create dir all")?;
-            let mut file = fs::File::create(to).context("create file")?;
+
+            fs::create_dir_all(to.parent().unwrap()).context("create dir all")?;
+            let mut file = File::create(to).context("create file")?;
             file.write_all(rendered.as_bytes()).context("write all")?;
         }
 
@@ -85,5 +85,39 @@ impl Display for TemplateState {
             TemplateState::BothMissing => "templated file and source are missing",
         }
         .fmt(f)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::Result;
+    use std::fs::File;
+    use std::io::Write;
+    use tempdir::TempDir;
+
+    #[test]
+    fn should_render_template() -> Result<()> {
+        let dir = TempDir::new("template")?;
+
+        let source_path = dir.path().join("source.txt");
+        let mut source = File::create(&source_path)?;
+        source.write_all(b"Hello, {{ name }}!")?;
+
+        let target_path = dir.path().join("target.txt");
+
+        let mut handlebars = Handlebars::new();
+        handlebars.register_template_string("template", "{{ name }}")?;
+
+        let variables = vec![("name".to_string(), "world".to_string())]
+            .into_iter()
+            .collect::<Variables>();
+
+        Template::render(&source_path, &target_path, &handlebars, &variables, false)?;
+
+        let target = fs::read_to_string(&target_path)?;
+        assert_eq!(target, "Hello, world!");
+
+        Ok(())
     }
 }
