@@ -76,7 +76,7 @@ pub fn remove_templated_scripts() -> Result<()> {
         .filter_map(Result::ok)
         .filter(|entry| {
             let path = entry.path();
-            path.extension().map_or(false, |ext| ext == "templated")
+            path.extension().is_some_and(|ext| ext == "templated")
         });
     for entry in templated {
         trace!("removing templated script: {:?}", entry.path());

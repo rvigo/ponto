@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use simple_logger::SimpleLogger;
 
 pub fn init(verbosity: u8, quiet: bool) -> Result<()> {
@@ -13,6 +13,6 @@ pub fn init(verbosity: u8, quiet: bool) -> Result<()> {
     SimpleLogger::new()
         .with_level(log::LevelFilter::Error)
         .with_module_level("ponto", level)
-        .init()?;
-    Ok(())
+        .init()
+        .context("cannot set logger")
 }

@@ -30,7 +30,7 @@ pub fn deploy(config: Configuration, opts: Options) -> Result<()> {
                 FileTarget::WithSpec(spec) => process_with_spec(
                     &from,
                     &spec.to,
-                    spec.symlink,
+                    spec.is_symlink,
                     &handlebars,
                     &package.variables,
                     opts.force,

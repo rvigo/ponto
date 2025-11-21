@@ -19,7 +19,7 @@ pub struct Options {
     #[clap(short, long, value_parser)]
     pub quiet: bool,
 
-    #[clap(short = 'v', long = "verbose", action = clap::ArgAction::Count)]
+    #[clap(short = 'v', long, action = clap::ArgAction::Count)]
     pub verbosity: u8,
 }
 

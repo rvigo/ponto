@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
 pub struct TargetSpec {
     pub to: PathBuf,
-    pub symlink: bool,
+    pub is_symlink: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq)]
@@ -141,7 +141,7 @@ fn expand_paths(files: Files) -> Result<Files> {
                     let expanded_to = expand_path(&target.to)?;
                     FileTarget::WithSpec(TargetSpec {
                         to: expanded_to,
-                        symlink: target.symlink,
+                        is_symlink: target.is_symlink,
                     })
                 }
             };
