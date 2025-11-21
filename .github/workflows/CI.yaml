@@ -1,0 +1,46 @@
+name: Test & Validations
+
+on:
+  push:
+    branches:
+      - "**"
+jobs:
+  format:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: |
+          cargo fmt --all -- --check
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: clippy
+      - name: Check the lints
+        run: |
+          cargo clippy -- -D warnings
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@1.88.0
+      - name: Unit Test
+        run: |
+          cargo test --workspace
+        env:
+          RUST_BACKTRACE: 1
